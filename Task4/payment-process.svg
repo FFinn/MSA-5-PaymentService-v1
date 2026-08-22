@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1080" viewBox="0 0 1900 1080">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#34495e"/></marker>
+    <style>
+      text { font-family: Arial, sans-serif; fill: #1f2933; }
+      .title { font-size: 30px; font-weight: bold; }
+      .label { font-size: 18px; font-weight: bold; }
+      .note { font-size: 15px; }
+      .task { fill: #e8f1fb; stroke: #2463a5; stroke-width: 2; rx: 12; }
+      .event { fill: #ffffff; stroke: #2463a5; stroke-width: 4; }
+      .gateway { fill: #fff6db; stroke: #c58a00; stroke-width: 2; }
+      .error { fill: #ffe8e8; stroke: #bd3131; stroke-width: 2; rx: 12; }
+      .ok { fill: #e7f7ed; stroke: #25824a; stroke-width: 2; rx: 12; }
+      .timer { fill: #f4ecff; stroke: #7652a8; stroke-width: 2; rx: 12; }
+      .flow { stroke: #34495e; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 7 5; }
+    </style>
+  </defs>
+  <rect width="1900" height="1080" fill="#ffffff"/>
+  <text x="55" y="55" class="title">OrchestrPay — BPMN-схема Saga обработки платежа</text>
+  <text x="55" y="84" class="note">Синие задачи — вызовы сервисов; жёлтые ромбы — шлюзы; фиолетовые блоки — ожидание и таймер; красные — компенсация.</text>
+
+  <circle cx="100" cy="250" r="25" class="event"/><text x="56" y="298" class="note">Старт</text>
+  <rect x="165" y="205" width="180" height="90" class="task"/><text x="194" y="244" class="label">Создать платёж</text><text x="199" y="269" class="note">и экземпляр Saga</text>
+  <rect x="415" y="205" width="190" height="90" class="task"/><text x="445" y="244" class="label">Списать деньги</text><text x="455" y="269" class="note">у плательщика</text>
+  <rect x="675" y="205" width="205" height="90" class="task"/><text x="705" y="244" class="label">Антифрод-проверка</text><text x="700" y="269" class="note">внешние проверки</text>
+  <polygon points="970,190 1030,250 970,310 910,250" class="gateway"/><text x="928" y="245" class="note">Решение</text><text x="930" y="264" class="note">антифрода?</text>
+  <rect x="1110" y="205" width="190" height="90" class="ok"/><text x="1130" y="244" class="label">Перевести деньги</text><text x="1150" y="269" class="note">контрагенту</text>
+  <text x="1120" y="185" class="note">Точка невозврата</text>
+  <polygon points="1390,190 1450,250 1390,310 1330,250" class="gateway"/><text x="1358" y="245" class="note">Перевод</text><text x="1356" y="264" class="note">подтверждён?</text>
+  <rect x="1530" y="205" width="185" height="90" class="ok"/><text x="1555" y="244" class="label">Зафиксировать</text><text x="1566" y="269" class="note">успех и уведомить</text>
+  <circle cx="1790" cy="250" r="25" class="event"/><circle cx="1790" cy="250" r="19" class="event"/><text x="1745" y="298" class="note">Успех</text>
+
+  <path d="M125,250 L165,250 M345,250 L415,250 M605,250 L675,250 M880,250 L910,250 M1030,250 L1110,250 M1300,250 L1330,250 M1450,250 L1530,250 M1715,250 L1765,250" class="flow"/>
+  <text x="1045" y="238" class="note">Разрешить</text><text x="1465" y="238" class="note">Да</text>
+
+  <rect x="720" y="420" width="220" height="90" class="timer"/><text x="746" y="458" class="label">Ожидать ручное</text><text x="760" y="483" class="label">решение (20 минут)</text>
+  <polygon points="1030,405 1090,465 1030,525 970,465" class="gateway"/><text x="990" y="460" class="note">Решение</text><text x="985" y="479" class="note">оператора?</text>
+  <rect x="1165" y="420" width="170" height="90" class="timer"/><text x="1185" y="458" class="label">Контрольный</text><text x="1203" y="483" class="note">срок: разрешить</text>
+  <path d="M970,310 L970,420 L720,420" class="flow"/><text x="820" y="355" class="note">Ручная проверка</text>
+  <path d="M940,465 L970,465" class="flow"/>
+  <path d="M1090,465 L1165,465 L1165,325 L1110,325 L1110,295" class="flow"/><text x="1100" y="395" class="note">Разрешить</text>
+  <path d="M830,420 L830,355 L1110,355 L1110,295" class="flow dash"/><text x="845" y="390" class="note">Таймер 20 минут</text>
+  <path d="M1335,465 L1365,465 L1365,325 L1110,325 L1110,295" class="flow"/>
+
+  <rect x="720" y="650" width="210" height="90" class="error"/><text x="748" y="688" class="label">Вернуть деньги</text><text x="756" y="713" class="note">плательщику</text>
+  <rect x="1015" y="650" width="220" height="90" class="error"/><text x="1040" y="688" class="label">Уведомить клиента</text><text x="1041" y="713" class="note">и безопасность</text>
+  <circle cx="1320" cy="695" r="25" class="event"/><circle cx="1320" cy="695" r="19" class="event"/><text x="1270" y="742" class="note">Возврат</text>
+  <path d="M910,250 L785,250 L785,650" class="flow"/><text x="790" y="330" class="note">Запретить</text>
+  <path d="M1030,465 L1030,590 L825,590 L825,650" class="flow"/><text x="875" y="580" class="note">Запретить</text>
+  <path d="M1390,310 L1390,590 L825,590 L825,650" class="flow"/><text x="1400" y="430" class="note">Нет</text>
+  <path d="M930,695 L1015,695 M1235,695 L1295,695" class="flow"/>
+
+  <rect x="1435" y="420" width="205" height="90" class="timer"/><text x="1463" y="458" class="label">Уточнить результат</text><text x="1484" y="483" class="note">у провайдера</text>
+  <path d="M1390,310 L1537,310 L1537,420" class="flow"/><text x="1505" y="350" class="note">Ответ неясен</text>
+  <path d="M1435,465 L1320,465 L1320,590 L825,590 L825,650" class="flow"/><text x="1340" y="535" class="note">Перевод не проведён</text>
+  <path d="M1640,465 L1715,465 L1715,295" class="flow"/><text x="1660" y="430" class="note">Перевод проведён</text>
+
+  <rect x="55" y="870" width="1780" height="130" fill="#f8fafc" stroke="#cbd5e1" rx="12"/>
+  <text x="85" y="910" class="label">Граница ответственности</text>
+  <text x="85" y="942" class="note">Camunda хранит состояние, сроки и маршрут. Payment Service выполняет списание, возврат и перевод; FraudCheck Service принимает решение; уведомления доставляются через outbox и брокер сообщений.</text>
+  <text x="85" y="974" class="note">При неопределённом ответе от банка или провайдера не выполняется ни повторное финансовое действие, ни преждевременный возврат: сначала запрашивается фактический статус.</text>
+</svg>

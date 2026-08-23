@@ -223,10 +223,10 @@
       <bpmn:incoming>Flow_TransferStatusNone_RefundRoute</bpmn:incoming>
       <bpmn:outgoing>Flow_RefundRoute_RefundCommand</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:textAnnotation id="TextAnnotation_EventRace" name="Ответ антифрода, решение оператора и таймер конкурируют по версии экземпляра Saga. Побеждает первое сохранённое событие; поздний ответ только журналируется и не создаёт второй перевод или возврат.">
+    <bpmn:textAnnotation id="TextAnnotation_EventRace">
       <bpmn:text>Ответ антифрода, решение оператора и таймер конкурируют по версии экземпляра Saga. Побеждает первое сохранённое событие; поздний ответ только журналируется и не создаёт второй перевод или возврат.</bpmn:text>
     </bpmn:textAnnotation>
-    <bpmn:textAnnotation id="TextAnnotation_Pivot" name="Pivot-точка: подтверждённый перевод контрагенту. До COMPLETED возможен автоматический REFUND_PAYER; после COMPLETED возврат в этой Saga не запускается.">
+    <bpmn:textAnnotation id="TextAnnotation_Pivot">
       <bpmn:text>Pivot-точка: подтверждённый перевод контрагенту. До COMPLETED возможен автоматический REFUND_PAYER; после COMPLETED возврат в этой Saga не запускается.</bpmn:text>
     </bpmn:textAnnotation>
     <bpmn:serviceTask id="Task_TransferToCounterparty" name="TRANSFER_TO_COUNTERPARTY: отправить команду перевода" camunda:type="external" camunda:topic="Task_TransferToCounterparty">

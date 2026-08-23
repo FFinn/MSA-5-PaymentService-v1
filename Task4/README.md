@@ -1,6 +1,6 @@
 # BPMN-схема процесса обработки платежа
 
-Исходник схемы подготовлен в [PlantUML](payment-process.puml). Файл [payment-process.jpg](payment-process.jpg) — изображение для проверки задания.
+Исходник схемы подготовлен в [PlantUML](payment-process.puml).
 
 Схема отражает:
 

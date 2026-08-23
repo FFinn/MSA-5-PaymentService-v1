@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_OrchestrPay" targetNamespace="https://orchestrpay.example/payment" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.22.0">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_OrchestrPay" targetNamespace="https://orchestrpay.example/payment" exporter="Camunda Modeler" exporterVersion="5.50.1" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.22.0">
   <bpmn:message id="Message_FraudAllow" name="Антифрод разрешил" />
   <bpmn:message id="Message_FraudDeny" name="Антифрод запретил" />
   <bpmn:message id="Message_FraudManual" name="Антифрод запросил ручную проверку" />
@@ -154,9 +154,9 @@
       <bpmn:messageEventDefinition messageRef="Message_FraudAllow" />
     </bpmn:intermediateCatchEvent>
     <bpmn:intermediateCatchEvent id="Event_FraudDeny" name="Получен запрет антифрода">
-      <bpmn:incoming>Flow_FraudEvents_Deny</bpmn:incoming>
-      <bpmn:outgoing>Flow_FraudDeny_Security</bpmn:outgoing>
       <bpmn:messageEventDefinition messageRef="Message_FraudDeny" />
+      <bpmn:incoming>Flow_FraudEvents_Deny</bpmn:incoming>
+      <bpmn:outgoing>Flow_FraudDeny_RefundRoute</bpmn:outgoing>
     </bpmn:intermediateCatchEvent>
     <bpmn:intermediateCatchEvent id="Event_FraudManual" name="Антифрод запросил ручную проверку">
       <bpmn:incoming>Flow_FraudEvents_Manual</bpmn:incoming>
@@ -194,16 +194,16 @@
       <bpmn:messageEventDefinition messageRef="Message_ManualAllow" />
     </bpmn:intermediateCatchEvent>
     <bpmn:intermediateCatchEvent id="Event_ManualDeny" name="Оператор запретил">
-      <bpmn:incoming>Flow_ManualEvents_Deny</bpmn:incoming>
-      <bpmn:outgoing>Flow_ManualDeny_Security</bpmn:outgoing>
       <bpmn:messageEventDefinition messageRef="Message_ManualDeny" />
+      <bpmn:incoming>Flow_ManualEvents_Deny</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManualDeny_RefundRoute</bpmn:outgoing>
     </bpmn:intermediateCatchEvent>
     <bpmn:intermediateCatchEvent id="Event_ManualCutoffTimer" name="20 минут ручной проверки истекли">
-      <bpmn:incoming>Flow_ManualEvents_Cutoff</bpmn:incoming>
-      <bpmn:outgoing>Flow_ManualCutoff_Approve</bpmn:outgoing>
       <bpmn:timerEventDefinition>
         <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT20M</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
+      <bpmn:incoming>Flow_ManualEvents_Cutoff</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManualCutoff_Approve</bpmn:outgoing>
     </bpmn:intermediateCatchEvent>
     <bpmn:serviceTask id="Task_ManualAllowApproved" name="Назначить маршрут «перевод»: разрешение оператора" camunda:type="external" camunda:topic="Task_ManualAllowApproved">
       <bpmn:incoming>Flow_ManualAllow_Approved</bpmn:incoming>
@@ -221,22 +221,21 @@
       <bpmn:outgoing>Flow_Approved_Transfer</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_SecurityFraud" name="Создать событие для системы безопасности" camunda:type="external" camunda:topic="Task_SecurityFraud">
-      <bpmn:incoming>Flow_FraudDeny_Security</bpmn:incoming>
-      <bpmn:incoming>Flow_ManualDeny_Security</bpmn:incoming>
-      <bpmn:outgoing>Flow_Security_RefundRoute</bpmn:outgoing>
+      <bpmn:incoming>Flow_RefundRoute_Security</bpmn:incoming>
+      <bpmn:outgoing>Flow_Security_RefundCommand</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_RefundRoute" name="Назначить маршрут «возврат»" camunda:type="external" camunda:topic="Task_RefundRoute">
-      <bpmn:incoming>Flow_Security_RefundRoute</bpmn:incoming>
+      <bpmn:incoming>Flow_FraudDeny_RefundRoute</bpmn:incoming>
+      <bpmn:incoming>Flow_ManualDeny_RefundRoute</bpmn:incoming>
       <bpmn:incoming>Flow_TransferNone_RefundRoute</bpmn:incoming>
       <bpmn:incoming>Flow_TransferStatusNone_RefundRoute</bpmn:incoming>
-      <bpmn:outgoing>Flow_RefundRoute_RefundCommand</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RefundRoute_SecurityNeeded</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:textAnnotation id="TextAnnotation_EventRace">
-      <bpmn:text>Ответ антифрода, решение оператора и таймер конкурируют по версии экземпляра Saga. Побеждает первое сохранённое событие; поздний ответ только журналируется и не создаёт второй перевод или возврат.</bpmn:text>
-    </bpmn:textAnnotation>
-    <bpmn:textAnnotation id="TextAnnotation_Pivot">
-      <bpmn:text>Pivot-точка: подтверждённый перевод контрагенту. До COMPLETED возможен автоматический REFUND_PAYER; после COMPLETED возврат в этой Saga не запускается.</bpmn:text>
-    </bpmn:textAnnotation>
+    <bpmn:exclusiveGateway id="Gateway_RefundRouteSecurityNeeded" name="Нужно событие безопасности?" default="Flow_RefundRoute_RefundCommand">
+      <bpmn:incoming>Flow_RefundRoute_SecurityNeeded</bpmn:incoming>
+      <bpmn:outgoing>Flow_RefundRoute_Security</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RefundRoute_RefundCommand</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_TransferToCounterparty" name="TRANSFER_TO_COUNTERPARTY: отправить команду перевода" camunda:type="external" camunda:topic="Task_TransferToCounterparty">
       <bpmn:incoming>Flow_Approved_Transfer</bpmn:incoming>
       <bpmn:outgoing>Flow_Transfer_Gateway</bpmn:outgoing>
@@ -320,6 +319,7 @@
     </bpmn:endEvent>
     <bpmn:serviceTask id="Task_RefundPayer" name="REFUND_PAYER: автоматический возврат с тем же ключом идемпотентности" camunda:type="external" camunda:topic="Task_RefundPayer">
       <bpmn:incoming>Flow_RefundRoute_RefundCommand</bpmn:incoming>
+      <bpmn:incoming>Flow_Security_RefundCommand</bpmn:incoming>
       <bpmn:incoming>Flow_RefundRetry_RefundCommand</bpmn:incoming>
       <bpmn:incoming>Flow_RefundStatusRetry_RefundCommand</bpmn:incoming>
       <bpmn:outgoing>Flow_RefundCommand_Gateway</bpmn:outgoing>
@@ -369,7 +369,7 @@
     </bpmn:intermediateCatchEvent>
     <bpmn:intermediateCatchEvent id="Event_RefundReconDeadline" name="Срок сверки возврата истёк">
       <bpmn:incoming>Flow_RefundWait_DeadlineTimer</bpmn:incoming>
-      <bpmn:outgoing>Flow_RefundStatusRequired</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RefundDeadline_Required</bpmn:outgoing>
       <bpmn:timerEventDefinition>
         <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">${refundReconciliationTimeout}</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
@@ -413,9 +413,6 @@
     <bpmn:endEvent id="EndEvent_RefundRequired" name="Ожидание сверки">
       <bpmn:incoming>Flow_RefundRequired_End</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:association id="Association_EventRace_Fraud" sourceRef="TextAnnotation_EventRace" targetRef="Gateway_FraudEvents" />
-    <bpmn:association id="Association_EventRace_Manual" sourceRef="TextAnnotation_EventRace" targetRef="Gateway_ManualEvents" />
-    <bpmn:association id="Association_Pivot_Transfer" sourceRef="TextAnnotation_Pivot" targetRef="Task_TransferToCounterparty" />
     <bpmn:sequenceFlow id="Flow_Start_CheckIdempotency" sourceRef="StartEvent_Payment" targetRef="Task_CheckIdempotency" />
     <bpmn:sequenceFlow id="Flow_CheckIdempotency_PaymentExists" sourceRef="Task_CheckIdempotency" targetRef="Gateway_PaymentExists" />
     <bpmn:sequenceFlow id="Flow_PaymentExists_ReturnSaved" name="да" sourceRef="Gateway_PaymentExists" targetRef="Task_ReturnSavedResult">
@@ -476,7 +473,7 @@
     <bpmn:sequenceFlow id="Flow_FraudEvents_Cutoff" name="контрольный срок" sourceRef="Gateway_FraudEvents" targetRef="Event_FraudCutoffTimer" />
     <bpmn:sequenceFlow id="Flow_FraudAllow_Approved" sourceRef="Event_FraudAllow" targetRef="Task_FraudAllowApproved" />
     <bpmn:sequenceFlow id="Flow_FraudAllow_ToApproved" sourceRef="Task_FraudAllowApproved" targetRef="Task_Approved" />
-    <bpmn:sequenceFlow id="Flow_FraudDeny_Security" sourceRef="Event_FraudDeny" targetRef="Task_SecurityFraud" />
+    <bpmn:sequenceFlow id="Flow_FraudDeny_RefundRoute" sourceRef="Event_FraudDeny" targetRef="Task_RefundRoute" />
     <bpmn:sequenceFlow id="Flow_FraudCutoff_Approve" sourceRef="Event_FraudCutoffTimer" targetRef="Task_FraudCutoffApprove" />
     <bpmn:sequenceFlow id="Flow_FraudCutoff_ToApproved" sourceRef="Task_FraudCutoffApprove" targetRef="Task_Approved" />
     <bpmn:sequenceFlow id="Flow_FraudManual_SaveWait" sourceRef="Event_FraudManual" targetRef="Task_SaveManualReviewWait" />
@@ -486,10 +483,7 @@
     <bpmn:sequenceFlow id="Flow_ManualEvents_Cutoff" name="20 минут" sourceRef="Gateway_ManualEvents" targetRef="Event_ManualCutoffTimer" />
     <bpmn:sequenceFlow id="Flow_ManualAllow_Approved" sourceRef="Event_ManualAllow" targetRef="Task_ManualAllowApproved" />
     <bpmn:sequenceFlow id="Flow_ManualAllow_ToApproved" sourceRef="Task_ManualAllowApproved" targetRef="Task_Approved" />
-    <bpmn:sequenceFlow id="Flow_ManualDeny_Security" sourceRef="Event_ManualDeny" targetRef="Task_SecurityFraud" />
-    <bpmn:sequenceFlow id="Flow_ManualCutoff_Approve" sourceRef="Event_ManualCutoffTimer" targetRef="Task_ManualCutoffApprove" />
-    <bpmn:sequenceFlow id="Flow_ManualCutoff_ToApproved" sourceRef="Task_ManualCutoffApprove" targetRef="Task_Approved" />
-    <bpmn:sequenceFlow id="Flow_Security_RefundRoute" sourceRef="Task_SecurityFraud" targetRef="Task_RefundRoute" />
+    <bpmn:sequenceFlow id="Flow_ManualDeny_RefundRoute" sourceRef="Event_ManualDeny" targetRef="Task_RefundRoute" />
     <bpmn:sequenceFlow id="Flow_Approved_Transfer" sourceRef="Task_Approved" targetRef="Task_TransferToCounterparty" />
     <bpmn:sequenceFlow id="Flow_Transfer_Gateway" sourceRef="Task_TransferToCounterparty" targetRef="Gateway_TransferResponse" />
     <bpmn:sequenceFlow id="Flow_TransferConfirmed_Completed" name="перевод подтверждён" sourceRef="Gateway_TransferResponse" targetRef="Task_Completed">
@@ -524,7 +518,9 @@
     <bpmn:sequenceFlow id="Flow_AuditPivot_Join" sourceRef="Task_AuditPivot" targetRef="Gateway_SuccessJoin" />
     <bpmn:sequenceFlow id="Flow_SuccessJoin_Closed" sourceRef="Gateway_SuccessJoin" targetRef="Task_ClosedSuccess" />
     <bpmn:sequenceFlow id="Flow_ClosedSuccess_End" sourceRef="Task_ClosedSuccess" targetRef="EndEvent_Success" />
-    <bpmn:sequenceFlow id="Flow_RefundRoute_RefundCommand" sourceRef="Task_RefundRoute" targetRef="Task_RefundPayer" />
+    <bpmn:sequenceFlow id="Flow_RefundRoute_RefundCommand" sourceRef="Gateway_RefundRouteSecurityNeeded" targetRef="Task_RefundPayer" name="событие безопасности не требуется">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityEventRequired == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_RefundCommand_Gateway" sourceRef="Task_RefundPayer" targetRef="Gateway_RefundResponse" />
     <bpmn:sequenceFlow id="Flow_RefundConfirmed_Refunded" name="возврат подтверждён" sourceRef="Gateway_RefundResponse" targetRef="Task_Refunded">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${refundResponse == "CONFIRMED"}</bpmn:conditionExpression>
@@ -568,802 +564,1028 @@
     <bpmn:sequenceFlow id="Flow_RefundJoin_Closed" sourceRef="Gateway_RefundJoin" targetRef="Task_ClosedRefund" />
     <bpmn:sequenceFlow id="Flow_ClosedRefund_End" sourceRef="Task_ClosedRefund" targetRef="EndEvent_Refund" />
     <bpmn:sequenceFlow id="Flow_RefundRequired_End" sourceRef="Task_RefundReconciliationRequired" targetRef="EndEvent_RefundRequired" />
+    <bpmn:textAnnotation id="TextAnnotation_EventRace">
+      <bpmn:text>Ответ антифрода, решение оператора и таймер конкурируют по версии экземпляра Saga. Побеждает первое сохранённое событие; поздний ответ только журналируется и не создаёт второй перевод или возврат.</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:textAnnotation id="TextAnnotation_Pivot">
+      <bpmn:text>Pivot-точка: подтверждённый перевод контрагенту. До COMPLETED возможен автоматический REFUND_PAYER; после COMPLETED возврат в этой Saga не запускается.</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_EventRace_Fraud" sourceRef="TextAnnotation_EventRace" targetRef="Gateway_FraudEvents" />
+    <bpmn:association id="Association_EventRace_Manual" sourceRef="TextAnnotation_EventRace" targetRef="Gateway_ManualEvents" />
+    <bpmn:association id="Association_Pivot_Transfer" sourceRef="TextAnnotation_Pivot" targetRef="Task_TransferToCounterparty" />
+    <bpmn:sequenceFlow id="Flow_ManualCutoff_Approve" sourceRef="Event_ManualCutoffTimer" targetRef="Task_ManualCutoffApprove" />
+    <bpmn:sequenceFlow id="Flow_ManualCutoff_ToApproved" sourceRef="Task_ManualCutoffApprove" targetRef="Task_Approved" />
+    <bpmn:sequenceFlow id="Flow_RefundRoute_SecurityNeeded" sourceRef="Task_RefundRoute" targetRef="Gateway_RefundRouteSecurityNeeded" />
+    <bpmn:sequenceFlow id="Flow_RefundRoute_Security" sourceRef="Gateway_RefundRouteSecurityNeeded" targetRef="Task_SecurityFraud" name="требуется событие безопасности">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityEventRequired == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Security_RefundCommand" sourceRef="Task_SecurityFraud" targetRef="Task_RefundPayer" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_OrchestrPay">
     <bpmndi:BPMNPlane id="BPMNPlane_OrchestrPay" bpmnElement="Process_OrchestrPayPayment">
       <bpmndi:BPMNShape id="Shape_StartEvent_Payment" bpmnElement="StartEvent_Payment">
-        <dc:Bounds x="1582" y="80" width="36" height="36" />
+        <dc:Bounds x="2022" y="80" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2025" y="116" width="30" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_CheckIdempotency" bpmnElement="Task_CheckIdempotency">
-        <dc:Bounds x="1480" y="220" width="240" height="70" />
+        <dc:Bounds x="1920" y="220" width="240" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_PaymentExists" bpmnElement="Gateway_PaymentExists" isMarkerVisible="true">
-        <dc:Bounds x="1575" y="380" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_ReturnSavedResult" bpmnElement="Task_ReturnSavedResult">
-        <dc:Bounds x="820" y="360" width="240" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EndEvent_ExistingPayment" bpmnElement="EndEvent_ExistingPayment">
-        <dc:Bounds x="922" y="510" width="36" height="36" />
+        <dc:Bounds x="2015" y="380" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2074.5" y="391" width="61" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_CreatePayment" bpmnElement="Task_CreatePayment">
-        <dc:Bounds x="1440" y="560" width="320" height="80" />
+        <dc:Bounds x="1880" y="560" width="320" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_Precheck" bpmnElement="Task_Precheck">
-        <dc:Bounds x="1480" y="730" width="240" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_PrecheckPassed" bpmnElement="Gateway_PrecheckPassed" isMarkerVisible="true">
-        <dc:Bounds x="1575" y="900" width="50" height="50" />
+        <dc:Bounds x="1920" y="730" width="240" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_CancelPrecheck" bpmnElement="Task_CancelPrecheck">
-        <dc:Bounds x="180" y="860" width="220" height="60" />
+        <dc:Bounds x="620" y="860" width="220" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_SetRejectedPrecheck" bpmnElement="Task_SetRejectedPrecheck">
-        <dc:Bounds x="180" y="1000" width="220" height="60" />
+        <dc:Bounds x="620" y="1000" width="220" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_OutboxPrecheckNotification" bpmnElement="Task_OutboxPrecheckNotification">
-        <dc:Bounds x="180" y="1140" width="220" height="70" />
+        <dc:Bounds x="620" y="1140" width="220" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_ClosedPrecheck" bpmnElement="Task_ClosedPrecheck">
-        <dc:Bounds x="210" y="1300" width="160" height="60" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EndEvent_PrecheckRejected" bpmnElement="EndEvent_PrecheckRejected">
-        <dc:Bounds x="272" y="1460" width="36" height="36" />
+        <dc:Bounds x="650" y="1300" width="160" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_DebitPayer" bpmnElement="Task_DebitPayer">
-        <dc:Bounds x="1440" y="1080" width="320" height="80" />
+        <dc:Bounds x="1880" y="1080" width="320" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_DebitResponse" bpmnElement="Gateway_DebitResponse" isMarkerVisible="true">
-        <dc:Bounds x="1575" y="1260" width="50" height="50" />
+        <dc:Bounds x="2015" y="1260" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1996" y="1310" width="89" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_SaveDebitReconciliation" bpmnElement="Task_SaveDebitReconciliation">
-        <dc:Bounds x="2500" y="1200" width="280" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_QueryDebitStatus" bpmnElement="Task_QueryDebitStatus">
-        <dc:Bounds x="2500" y="1360" width="280" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_DebitStatus" bpmnElement="Gateway_DebitStatus" isMarkerVisible="true">
-        <dc:Bounds x="2625" y="1540" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_DebitReconWait" bpmnElement="Gateway_DebitReconWait">
-        <dc:Bounds x="2625" y="1710" width="50" height="50" />
+        <dc:Bounds x="2940" y="1200" width="280" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_DebitRetryTimer" bpmnElement="Event_DebitRetryTimer">
-        <dc:Bounds x="2250" y="1880" width="44" height="44" />
+        <dc:Bounds x="2690" y="1880" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2672" y="1924" width="80" height="53" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_DebitReconDeadline" bpmnElement="Event_DebitReconDeadline">
-        <dc:Bounds x="3020" y="1880" width="44" height="44" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_FinReconDebit" bpmnElement="Task_FinReconDebit">
-        <dc:Bounds x="2910" y="2040" width="300" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EndEvent_FinReconDebit" bpmnElement="EndEvent_FinReconDebit">
-        <dc:Bounds x="3042" y="2200" width="36" height="36" />
+        <dc:Bounds x="3460" y="1880" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3442" y="1842.5" width="79" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_Debited" bpmnElement="Task_Debited">
-        <dc:Bounds x="1460" y="1450" width="280" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_CancelDebit" bpmnElement="Task_CancelDebit">
-        <dc:Bounds x="520" y="1260" width="220" height="60" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_SetRejectedDebit" bpmnElement="Task_SetRejectedDebit">
-        <dc:Bounds x="520" y="1400" width="220" height="60" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_OutboxDebitNotification" bpmnElement="Task_OutboxDebitNotification">
-        <dc:Bounds x="520" y="1540" width="220" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_ClosedDebit" bpmnElement="Task_ClosedDebit">
-        <dc:Bounds x="550" y="1700" width="160" height="60" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EndEvent_DebitRejected" bpmnElement="EndEvent_DebitRejected">
-        <dc:Bounds x="612" y="1860" width="36" height="36" />
+        <dc:Bounds x="1900" y="1450" width="280" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_FraudRequest" bpmnElement="Task_FraudRequest">
-        <dc:Bounds x="1440" y="1630" width="320" height="80" />
+        <dc:Bounds x="1880" y="1630" width="320" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_SaveFraudChecking" bpmnElement="Task_SaveFraudChecking">
-        <dc:Bounds x="1440" y="1790" width="320" height="60" />
+        <dc:Bounds x="1880" y="1790" width="320" height="60" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_FraudEvents" bpmnElement="Gateway_FraudEvents">
-        <dc:Bounds x="1575" y="1960" width="50" height="50" />
+        <dc:Bounds x="2015" y="1960" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2001" y="2010" width="79" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_FraudAllow" bpmnElement="Event_FraudAllow">
-        <dc:Bounds x="930" y="2160" width="44" height="44" />
+        <dc:Bounds x="1370" y="2160" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1361" y="2204" width="63" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_FraudDeny" bpmnElement="Event_FraudDeny">
-        <dc:Bounds x="250" y="2160" width="44" height="44" />
+        <dc:Bounds x="690" y="2160" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="671" y="2122.5" width="81" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_FraudManual" bpmnElement="Event_FraudManual">
-        <dc:Bounds x="1580" y="2110" width="44" height="44" />
+        <dc:Bounds x="2020" y="2110" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1998" y="2154" width="88" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_FraudCutoffTimer" bpmnElement="Event_FraudCutoffTimer">
-        <dc:Bounds x="2380" y="2160" width="44" height="44" />
+        <dc:Bounds x="2820" y="2160" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2800" y="2110" width="83" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_FraudAllowApproved" bpmnElement="Task_FraudAllowApproved">
-        <dc:Bounds x="822" y="2320" width="260" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_FraudCutoffApprove" bpmnElement="Task_FraudCutoffApprove">
-        <dc:Bounds x="2252" y="2320" width="300" height="80" />
+        <dc:Bounds x="1262" y="2320" width="260" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_SaveManualReviewWait" bpmnElement="Task_SaveManualReviewWait">
-        <dc:Bounds x="1440" y="2260" width="320" height="80" />
+        <dc:Bounds x="1880" y="2260" width="320" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_ManualEvents" bpmnElement="Gateway_ManualEvents">
-        <dc:Bounds x="1575" y="2450" width="50" height="50" />
+        <dc:Bounds x="2015" y="2450" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2002" y="2500" width="76" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_ManualAllow" bpmnElement="Event_ManualAllow">
-        <dc:Bounds x="930" y="2640" width="44" height="44" />
+        <dc:Bounds x="1370" y="2640" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1367" y="2684" width="51" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_ManualDeny" bpmnElement="Event_ManualDeny">
-        <dc:Bounds x="250" y="2640" width="44" height="44" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Event_ManualCutoffTimer" bpmnElement="Event_ManualCutoffTimer">
-        <dc:Bounds x="2380" y="2640" width="44" height="44" />
+        <dc:Bounds x="690" y="2640" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="630" y="2648" width="50" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_ManualAllowApproved" bpmnElement="Task_ManualAllowApproved">
-        <dc:Bounds x="802" y="2800" width="300" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_ManualCutoffApprove" bpmnElement="Task_ManualCutoffApprove">
-        <dc:Bounds x="2242" y="2800" width="320" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_Approved" bpmnElement="Task_Approved">
-        <dc:Bounds x="1460" y="2960" width="280" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_SecurityFraud" bpmnElement="Task_SecurityFraud">
-        <dc:Bounds x="180" y="2540" width="300" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_RefundRoute" bpmnElement="Task_RefundRoute">
-        <dc:Bounds x="180" y="3340" width="280" height="60" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_TextAnnotation_EventRace" bpmnElement="TextAnnotation_EventRace">
-        <dc:Bounds x="2940" y="2350" width="330" height="110" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_TextAnnotation_Pivot" bpmnElement="TextAnnotation_Pivot">
-        <dc:Bounds x="2140" y="2980" width="330" height="100" />
+        <dc:Bounds x="1242" y="2800" width="300" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_TransferToCounterparty" bpmnElement="Task_TransferToCounterparty">
-        <dc:Bounds x="1440" y="3160" width="320" height="80" />
+        <dc:Bounds x="1880" y="3160" width="320" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_TransferResponse" bpmnElement="Gateway_TransferResponse" isMarkerVisible="true">
-        <dc:Bounds x="1575" y="3340" width="50" height="50" />
+        <dc:Bounds x="2015" y="3340" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1996" y="3390" width="89" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_SaveTransferReconciliation" bpmnElement="Task_SaveTransferReconciliation">
-        <dc:Bounds x="2500" y="3260" width="300" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_QueryTransferStatus" bpmnElement="Task_QueryTransferStatus">
-        <dc:Bounds x="2500" y="3420" width="300" height="80" />
+        <dc:Bounds x="2940" y="3260" width="300" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_TransferStatus" bpmnElement="Gateway_TransferStatus" isMarkerVisible="true">
-        <dc:Bounds x="2625" y="3600" width="50" height="50" />
+        <dc:Bounds x="3065" y="3600" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3124.5" y="3611" width="87" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_TransferReconWait" bpmnElement="Gateway_TransferReconWait">
-        <dc:Bounds x="2625" y="3770" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Event_TransferRetryTimer" bpmnElement="Event_TransferRetryTimer">
-        <dc:Bounds x="2250" y="3940" width="44" height="44" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Event_TransferReconDeadline" bpmnElement="Event_TransferReconDeadline">
-        <dc:Bounds x="3020" y="3940" width="44" height="44" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_FinReconTransfer" bpmnElement="Task_FinReconTransfer">
-        <dc:Bounds x="2910" y="4100" width="300" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EndEvent_FinReconTransfer" bpmnElement="EndEvent_FinReconTransfer">
-        <dc:Bounds x="3042" y="4260" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_Completed" bpmnElement="Task_Completed">
-        <dc:Bounds x="1450" y="3560" width="300" height="80" />
+        <dc:Bounds x="3065" y="3770" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3048" y="3820" width="84" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_SuccessFork" bpmnElement="Gateway_SuccessFork">
-        <dc:Bounds x="1575" y="3740" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_NotifyCustomerSuccess" bpmnElement="Task_NotifyCustomerSuccess">
-        <dc:Bounds x="1160" y="3920" width="250" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_AuditPivot" bpmnElement="Task_AuditPivot">
-        <dc:Bounds x="1810" y="3920" width="250" height="70" />
+        <dc:Bounds x="2015" y="3740" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2005" y="3790" width="70" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_SuccessJoin" bpmnElement="Gateway_SuccessJoin">
-        <dc:Bounds x="1575" y="4120" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_ClosedSuccess" bpmnElement="Task_ClosedSuccess">
-        <dc:Bounds x="1520" y="4310" width="160" height="60" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EndEvent_Success" bpmnElement="EndEvent_Success">
-        <dc:Bounds x="1582" y="4470" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_RefundPayer" bpmnElement="Task_RefundPayer">
-        <dc:Bounds x="160" y="3520" width="320" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_RefundResponse" bpmnElement="Gateway_RefundResponse" isMarkerVisible="true">
-        <dc:Bounds x="295" y="3710" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_CheckRefundRetry" bpmnElement="Task_CheckRefundRetry">
-        <dc:Bounds x="820" y="3665" width="300" height="70" />
+        <dc:Bounds x="2015" y="4120" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2008" y="4082.5" width="63" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Gateway_RefundRetryAllowed" bpmnElement="Gateway_RefundRetryAllowed" isMarkerVisible="true">
-        <dc:Bounds x="945" y="3840" width="50" height="50" />
+        <dc:Bounds x="1385" y="3840" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1307.5" y="3851" width="67" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_SaveRefundReconciliation" bpmnElement="Task_SaveRefundReconciliation">
-        <dc:Bounds x="940" y="4300" width="300" height="70" />
+      <bpmndi:BPMNShape id="Shape_Task_FraudCutoffApprove" bpmnElement="Task_FraudCutoffApprove">
+        <dc:Bounds x="2692" y="2360" width="300" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_QueryRefundStatus" bpmnElement="Task_QueryRefundStatus">
-        <dc:Bounds x="940" y="4460" width="300" height="80" />
+      <bpmndi:BPMNShape id="Shape_Event_ManualCutoffTimer" bpmnElement="Event_ManualCutoffTimer">
+        <dc:Bounds x="2820" y="2598" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2873.5" y="2600" width="85" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_RefundStatus" bpmnElement="Gateway_RefundStatus" isMarkerVisible="true">
-        <dc:Bounds x="1065" y="4640" width="50" height="50" />
+      <bpmndi:BPMNShape id="Shape_Task_ManualCutoffApprove" bpmnElement="Task_ManualCutoffApprove">
+        <dc:Bounds x="2682" y="2810" width="320" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_RefundReconWait" bpmnElement="Gateway_RefundReconWait">
-        <dc:Bounds x="1065" y="4810" width="50" height="50" />
+      <bpmndi:BPMNShape id="Shape_Task_Approved" bpmnElement="Task_Approved">
+        <dc:Bounds x="1900" y="2885" width="280" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_QueryTransferStatus" bpmnElement="Task_QueryTransferStatus">
+        <dc:Bounds x="2940" y="3440" width="300" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Event_TransferRetryTimer" bpmnElement="Event_TransferRetryTimer">
+        <dc:Bounds x="2690" y="3773" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2672" y="3817" width="80" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Event_TransferReconDeadline" bpmnElement="Event_TransferReconDeadline">
+        <dc:Bounds x="3460" y="3773" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3442" y="3735.5" width="80" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_FinReconTransfer" bpmnElement="Task_FinReconTransfer">
+        <dc:Bounds x="3332" y="3860" width="300" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_FinReconTransfer" bpmnElement="EndEvent_FinReconTransfer">
+        <dc:Bounds x="3464" y="3982" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3456" y="4018" width="53" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_AuditPivot" bpmnElement="Task_AuditPivot">
+        <dc:Bounds x="2095" y="3920" width="250" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_NotifyCustomerSuccess" bpmnElement="Task_NotifyCustomerSuccess">
+        <dc:Bounds x="1745" y="3920" width="250" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ClosedSuccess" bpmnElement="Task_ClosedSuccess">
+        <dc:Bounds x="1960" y="4210" width="160" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_Success" bpmnElement="EndEvent_Success">
+        <dc:Bounds x="2022" y="4302" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2024" y="4338" width="32" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_RefundRetryTimer" bpmnElement="Event_RefundRetryTimer">
-        <dc:Bounds x="700" y="4980" width="44" height="44" />
+        <dc:Bounds x="1140" y="4813" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1122" y="4857" width="80" height="53" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Event_RefundReconDeadline" bpmnElement="Event_RefundReconDeadline">
-        <dc:Bounds x="1450" y="4980" width="44" height="44" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_Refunded" bpmnElement="Task_Refunded">
-        <dc:Bounds x="180" y="3930" width="260" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_RefundFork" bpmnElement="Gateway_RefundFork">
-        <dc:Bounds x="295" y="4090" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_NotifyCustomerRefund" bpmnElement="Task_NotifyCustomerRefund">
-        <dc:Bounds x="20" y="4260" width="260" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_NotifySecurityRefund" bpmnElement="Task_NotifySecurityRefund">
-        <dc:Bounds x="550" y="4260" width="260" height="70" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Gateway_RefundJoin" bpmnElement="Gateway_RefundJoin">
-        <dc:Bounds x="295" y="4440" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Task_ClosedRefund" bpmnElement="Task_ClosedRefund">
-        <dc:Bounds x="240" y="4610" width="160" height="60" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EndEvent_Refund" bpmnElement="EndEvent_Refund">
-        <dc:Bounds x="302" y="4770" width="36" height="36" />
+        <dc:Bounds x="1890" y="4813" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1874" y="4857" width="77" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Task_RefundReconciliationRequired" bpmnElement="Task_RefundReconciliationRequired">
-        <dc:Bounds x="940" y="5160" width="320" height="80" />
+        <dc:Bounds x="1380" y="5060" width="320" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_EndEvent_RefundRequired" bpmnElement="EndEvent_RefundRequired">
-        <dc:Bounds x="1082" y="5320" width="36" height="36" />
+        <dc:Bounds x="1522" y="5220" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1514" y="5256" width="53" height="27" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Edge_Flow_Start_CheckIdempotency" bpmnElement="Flow_Start_CheckIdempotency">
-        <di:waypoint x="1600.0" y="116.0" />
-        <di:waypoint x="1600.0" y="220.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_CheckIdempotency_PaymentExists" bpmnElement="Flow_CheckIdempotency_PaymentExists">
-        <di:waypoint x="1600.0" y="290.0" />
-        <di:waypoint x="1600.0" y="380.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_PaymentExists_ReturnSaved" bpmnElement="Flow_PaymentExists_ReturnSaved">
-        <di:waypoint x="1575.0" y="405.0" />
-        <di:waypoint x="1317.5" y="405.0" />
-        <di:waypoint x="1317.5" y="395.0" />
-        <di:waypoint x="1060.0" y="395.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ReturnSaved_End" bpmnElement="Flow_ReturnSaved_End">
-        <di:waypoint x="940.0" y="430.0" />
-        <di:waypoint x="940.0" y="510.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_PaymentNotExists_CreatePayment" bpmnElement="Flow_PaymentNotExists_CreatePayment">
-        <di:waypoint x="1600.0" y="430.0" />
-        <di:waypoint x="1600.0" y="560.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_CreatePayment_Precheck" bpmnElement="Flow_CreatePayment_Precheck">
-        <di:waypoint x="1600.0" y="640.0" />
-        <di:waypoint x="1600.0" y="730.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Precheck_Gateway" bpmnElement="Flow_Precheck_Gateway">
-        <di:waypoint x="1600.0" y="800.0" />
-        <di:waypoint x="1600.0" y="900.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_PrecheckPassed_Debit" bpmnElement="Flow_PrecheckPassed_Debit">
-        <di:waypoint x="1600.0" y="950.0" />
-        <di:waypoint x="1600.0" y="1080.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_PrecheckFailed_Cancel" bpmnElement="Flow_PrecheckFailed_Cancel">
-        <di:waypoint x="1575.0" y="925.0" />
-        <di:waypoint x="987.5" y="925.0" />
-        <di:waypoint x="987.5" y="890.0" />
-        <di:waypoint x="400.0" y="890.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_CancelPrecheck_Rejected" bpmnElement="Flow_CancelPrecheck_Rejected">
-        <di:waypoint x="290.0" y="920.0" />
-        <di:waypoint x="290.0" y="1000.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RejectedPrecheck_Outbox" bpmnElement="Flow_RejectedPrecheck_Outbox">
-        <di:waypoint x="290.0" y="1060.0" />
-        <di:waypoint x="290.0" y="1140.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_OutboxPrecheck_Closed" bpmnElement="Flow_OutboxPrecheck_Closed">
-        <di:waypoint x="290.0" y="1210.0" />
-        <di:waypoint x="290.0" y="1300.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ClosedPrecheck_End" bpmnElement="Flow_ClosedPrecheck_End">
-        <di:waypoint x="290.0" y="1360.0" />
-        <di:waypoint x="290.0" y="1460.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Debit_Gateway" bpmnElement="Flow_Debit_Gateway">
-        <di:waypoint x="1600.0" y="1160.0" />
-        <di:waypoint x="1600.0" y="1260.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitConfirmed_Debited" bpmnElement="Flow_DebitConfirmed_Debited">
-        <di:waypoint x="1600.0" y="1310.0" />
-        <di:waypoint x="1600.0" y="1450.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitRefused_Cancel" bpmnElement="Flow_DebitRefused_Cancel">
-        <di:waypoint x="1575.0" y="1285.0" />
-        <di:waypoint x="1157.5" y="1285.0" />
-        <di:waypoint x="1157.5" y="1290.0" />
-        <di:waypoint x="740.0" y="1290.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitUnknown_SaveRecon" bpmnElement="Flow_DebitUnknown_SaveRecon">
-        <di:waypoint x="1625.0" y="1285.0" />
-        <di:waypoint x="2062.5" y="1285.0" />
-        <di:waypoint x="2062.5" y="1235.0" />
-        <di:waypoint x="2500.0" y="1235.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_CancelDebit_Rejected" bpmnElement="Flow_CancelDebit_Rejected">
-        <di:waypoint x="630.0" y="1320.0" />
-        <di:waypoint x="630.0" y="1400.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RejectedDebit_Outbox" bpmnElement="Flow_RejectedDebit_Outbox">
-        <di:waypoint x="630.0" y="1460.0" />
-        <di:waypoint x="630.0" y="1540.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_OutboxDebit_Closed" bpmnElement="Flow_OutboxDebit_Closed">
-        <di:waypoint x="630.0" y="1610.0" />
-        <di:waypoint x="630.0" y="1700.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ClosedDebit_End" bpmnElement="Flow_ClosedDebit_End">
-        <di:waypoint x="630.0" y="1760.0" />
-        <di:waypoint x="630.0" y="1860.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SaveDebitRecon_Query" bpmnElement="Flow_SaveDebitRecon_Query">
-        <di:waypoint x="2640.0" y="1270.0" />
-        <di:waypoint x="2640.0" y="1360.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_QueryDebitStatus_Gateway" bpmnElement="Flow_QueryDebitStatus_Gateway">
-        <di:waypoint x="2640.0" y="1440.0" />
-        <di:waypoint x="2640.0" y="1490.0" />
-        <di:waypoint x="2650.0" y="1490.0" />
-        <di:waypoint x="2650.0" y="1540.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitStatusConfirmed_Debited" bpmnElement="Flow_DebitStatusConfirmed_Debited">
-        <di:waypoint x="2625.0" y="1565.0" />
-        <di:waypoint x="2182.5" y="1565.0" />
-        <di:waypoint x="2182.5" y="1485.0" />
-        <di:waypoint x="1740.0" y="1485.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitStatusNone_Cancel" bpmnElement="Flow_DebitStatusNone_Cancel">
-        <di:waypoint x="2625.0" y="1565.0" />
-        <di:waypoint x="1682.5" y="1565.0" />
-        <di:waypoint x="1682.5" y="1290.0" />
-        <di:waypoint x="740.0" y="1290.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitStatusUnknown_Wait" bpmnElement="Flow_DebitStatusUnknown_Wait">
-        <di:waypoint x="2650.0" y="1590.0" />
-        <di:waypoint x="2650.0" y="1710.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitWait_RetryTimer" bpmnElement="Flow_DebitWait_RetryTimer">
-        <di:waypoint x="2625.0" y="1735.0" />
-        <di:waypoint x="2459.5" y="1735.0" />
-        <di:waypoint x="2459.5" y="1902.0" />
-        <di:waypoint x="2294.0" y="1902.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitRetry_Query" bpmnElement="Flow_DebitRetry_Query">
-        <di:waypoint x="2272.0" y="1880.0" />
-        <di:waypoint x="2272.0" y="1340" />
-        <di:waypoint x="2500.0" y="1340" />
-        <di:waypoint x="2500.0" y="1400.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitWait_DeadlineTimer" bpmnElement="Flow_DebitWait_DeadlineTimer">
-        <di:waypoint x="2675.0" y="1735.0" />
-        <di:waypoint x="2847.5" y="1735.0" />
-        <di:waypoint x="2847.5" y="1902.0" />
-        <di:waypoint x="3020.0" y="1902.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_DebitDeadline_FinRecon" bpmnElement="Flow_DebitDeadline_FinRecon">
-        <di:waypoint x="3042.0" y="1924.0" />
-        <di:waypoint x="3042.0" y="1982.0" />
-        <di:waypoint x="3060.0" y="1982.0" />
-        <di:waypoint x="3060.0" y="2040.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FinReconDebit_End" bpmnElement="Flow_FinReconDebit_End">
-        <di:waypoint x="3060.0" y="2120.0" />
-        <di:waypoint x="3060.0" y="2200.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Debited_FraudRequest" bpmnElement="Flow_Debited_FraudRequest">
-        <di:waypoint x="1600.0" y="1520.0" />
-        <di:waypoint x="1600.0" y="1630.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudRequest_Wait" bpmnElement="Flow_FraudRequest_Wait">
-        <di:waypoint x="1600.0" y="1710.0" />
-        <di:waypoint x="1600.0" y="1790.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SaveFraudChecking_EventGateway" bpmnElement="Flow_SaveFraudChecking_EventGateway">
-        <di:waypoint x="1600.0" y="1850.0" />
-        <di:waypoint x="1600.0" y="1960.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Allow" bpmnElement="Flow_FraudEvents_Allow">
-        <di:waypoint x="1575.0" y="1985.0" />
-        <di:waypoint x="1274.5" y="1985.0" />
-        <di:waypoint x="1274.5" y="2182.0" />
-        <di:waypoint x="974.0" y="2182.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Deny" bpmnElement="Flow_FraudEvents_Deny">
-        <di:waypoint x="1575.0" y="1985.0" />
-        <di:waypoint x="934.5" y="1985.0" />
-        <di:waypoint x="934.5" y="2182.0" />
-        <di:waypoint x="294.0" y="2182.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Manual" bpmnElement="Flow_FraudEvents_Manual">
-        <di:waypoint x="1600.0" y="2010.0" />
-        <di:waypoint x="1600.0" y="2060.0" />
-        <di:waypoint x="1602.0" y="2060.0" />
-        <di:waypoint x="1602.0" y="2110.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Cutoff" bpmnElement="Flow_FraudEvents_Cutoff">
-        <di:waypoint x="1625.0" y="1985.0" />
-        <di:waypoint x="2002.5" y="1985.0" />
-        <di:waypoint x="2002.5" y="2182.0" />
-        <di:waypoint x="2380.0" y="2182.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudAllow_Approved" bpmnElement="Flow_FraudAllow_Approved">
-        <di:waypoint x="952.0" y="2204.0" />
-        <di:waypoint x="952.0" y="2320.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudAllow_ToApproved" bpmnElement="Flow_FraudAllow_ToApproved">
-        <di:waypoint x="952.0" y="2390.0" />
-        <di:waypoint x="952.0" y="2920" />
-        <di:waypoint x="1460.0" y="2920" />
-        <di:waypoint x="1460.0" y="2995.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudDeny_Security" bpmnElement="Flow_FraudDeny_Security">
-        <di:waypoint x="272.0" y="2204.0" />
-        <di:waypoint x="272.0" y="2480" />
-        <di:waypoint x="330.0" y="2480" />
-        <di:waypoint x="330.0" y="2540.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudCutoff_Approve" bpmnElement="Flow_FraudCutoff_Approve">
-        <di:waypoint x="2402.0" y="2204.0" />
-        <di:waypoint x="2402.0" y="2320.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudCutoff_ToApproved" bpmnElement="Flow_FraudCutoff_ToApproved">
-        <di:waypoint x="2402.0" y="2400.0" />
-        <di:waypoint x="2402.0" y="2920" />
-        <di:waypoint x="1740.0" y="2920" />
-        <di:waypoint x="1740.0" y="2995.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FraudManual_SaveWait" bpmnElement="Flow_FraudManual_SaveWait">
-        <di:waypoint x="1602.0" y="2154.0" />
-        <di:waypoint x="1602.0" y="2207.0" />
-        <di:waypoint x="1600.0" y="2207.0" />
-        <di:waypoint x="1600.0" y="2260.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SaveManual_EventGateway" bpmnElement="Flow_SaveManual_EventGateway">
-        <di:waypoint x="1600.0" y="2340.0" />
-        <di:waypoint x="1600.0" y="2450.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualEvents_Allow" bpmnElement="Flow_ManualEvents_Allow">
-        <di:waypoint x="1575.0" y="2475.0" />
-        <di:waypoint x="1274.5" y="2475.0" />
-        <di:waypoint x="1274.5" y="2662.0" />
-        <di:waypoint x="974.0" y="2662.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualEvents_Deny" bpmnElement="Flow_ManualEvents_Deny">
-        <di:waypoint x="1600.0" y="2450.0" />
-        <di:waypoint x="1600" y="2380" />
-        <di:waypoint x="272" y="2380" />
-        <di:waypoint x="272.0" y="2640.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualEvents_Cutoff" bpmnElement="Flow_ManualEvents_Cutoff">
-        <di:waypoint x="1625.0" y="2475.0" />
-        <di:waypoint x="2002.5" y="2475.0" />
-        <di:waypoint x="2002.5" y="2662.0" />
-        <di:waypoint x="2380.0" y="2662.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualAllow_Approved" bpmnElement="Flow_ManualAllow_Approved">
-        <di:waypoint x="952.0" y="2684.0" />
-        <di:waypoint x="952.0" y="2800.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualAllow_ToApproved" bpmnElement="Flow_ManualAllow_ToApproved">
-        <di:waypoint x="952.0" y="2870.0" />
-        <di:waypoint x="952.0" y="2920" />
-        <di:waypoint x="1460.0" y="2920" />
-        <di:waypoint x="1460.0" y="2995.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualDeny_Security" bpmnElement="Flow_ManualDeny_Security">
-        <di:waypoint x="272.0" y="2684.0" />
-        <di:waypoint x="272.0" y="2760" />
-        <di:waypoint x="180.0" y="2760" />
-        <di:waypoint x="180.0" y="2575.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualCutoff_Approve" bpmnElement="Flow_ManualCutoff_Approve">
-        <di:waypoint x="2402.0" y="2684.0" />
-        <di:waypoint x="2402.0" y="2800.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ManualCutoff_ToApproved" bpmnElement="Flow_ManualCutoff_ToApproved">
-        <di:waypoint x="2402.0" y="2880.0" />
-        <di:waypoint x="2402.0" y="2920" />
-        <di:waypoint x="1740.0" y="2920" />
-        <di:waypoint x="1740.0" y="2995.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Security_RefundRoute" bpmnElement="Flow_Security_RefundRoute">
-        <di:waypoint x="330.0" y="2610.0" />
-        <di:waypoint x="330.0" y="3260" />
-        <di:waypoint x="320.0" y="3260" />
-        <di:waypoint x="320.0" y="3340.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Approved_Transfer" bpmnElement="Flow_Approved_Transfer">
-        <di:waypoint x="1600.0" y="3030.0" />
-        <di:waypoint x="1600.0" y="3160.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Transfer_Gateway" bpmnElement="Flow_Transfer_Gateway">
-        <di:waypoint x="1600.0" y="3240.0" />
-        <di:waypoint x="1600.0" y="3340.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferConfirmed_Completed" bpmnElement="Flow_TransferConfirmed_Completed">
-        <di:waypoint x="1600.0" y="3390.0" />
-        <di:waypoint x="1600.0" y="3560.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferNone_RefundRoute" bpmnElement="Flow_TransferNone_RefundRoute">
-        <di:waypoint x="1575.0" y="3365.0" />
-        <di:waypoint x="760" y="3365.0" />
-        <di:waypoint x="760" y="3370.0" />
-        <di:waypoint x="460.0" y="3370.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferUnknown_SaveRecon" bpmnElement="Flow_TransferUnknown_SaveRecon">
-        <di:waypoint x="1625.0" y="3365.0" />
-        <di:waypoint x="2062.5" y="3365.0" />
-        <di:waypoint x="2062.5" y="3295.0" />
-        <di:waypoint x="2500.0" y="3295.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SaveTransferRecon_Query" bpmnElement="Flow_SaveTransferRecon_Query">
-        <di:waypoint x="2650.0" y="3330.0" />
-        <di:waypoint x="2650.0" y="3420.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_QueryTransferStatus_Gateway" bpmnElement="Flow_QueryTransferStatus_Gateway">
-        <di:waypoint x="2650.0" y="3500.0" />
-        <di:waypoint x="2650.0" y="3600.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferStatusConfirmed_Completed" bpmnElement="Flow_TransferStatusConfirmed_Completed">
-        <di:waypoint x="2625.0" y="3625.0" />
-        <di:waypoint x="2187.5" y="3625.0" />
-        <di:waypoint x="2187.5" y="3600.0" />
-        <di:waypoint x="1750.0" y="3600.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferStatusNone_RefundRoute" bpmnElement="Flow_TransferStatusNone_RefundRoute">
-        <di:waypoint x="2625.0" y="3625.0" />
-        <di:waypoint x="1120" y="3625" />
-        <di:waypoint x="1120" y="3370" />
-        <di:waypoint x="460.0" y="3370.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferStatusUnknown_Wait" bpmnElement="Flow_TransferStatusUnknown_Wait">
-        <di:waypoint x="2650.0" y="3650.0" />
-        <di:waypoint x="2650.0" y="3770.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferWait_RetryTimer" bpmnElement="Flow_TransferWait_RetryTimer">
-        <di:waypoint x="2625.0" y="3795.0" />
-        <di:waypoint x="2459.5" y="3795.0" />
-        <di:waypoint x="2459.5" y="3962.0" />
-        <di:waypoint x="2294.0" y="3962.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferRetry_Query" bpmnElement="Flow_TransferRetry_Query">
-        <di:waypoint x="2272.0" y="3940.0" />
-        <di:waypoint x="2272.0" y="3400" />
-        <di:waypoint x="2500.0" y="3400" />
-        <di:waypoint x="2500.0" y="3460.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferWait_DeadlineTimer" bpmnElement="Flow_TransferWait_DeadlineTimer">
-        <di:waypoint x="2675.0" y="3795.0" />
-        <di:waypoint x="2847.5" y="3795.0" />
-        <di:waypoint x="2847.5" y="3962.0" />
-        <di:waypoint x="3020.0" y="3962.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_TransferDeadline_FinRecon" bpmnElement="Flow_TransferDeadline_FinRecon">
-        <di:waypoint x="3042.0" y="3984.0" />
-        <di:waypoint x="3042.0" y="4042.0" />
-        <di:waypoint x="3060.0" y="4042.0" />
-        <di:waypoint x="3060.0" y="4100.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_FinReconTransfer_End" bpmnElement="Flow_FinReconTransfer_End">
-        <di:waypoint x="3060.0" y="4180.0" />
-        <di:waypoint x="3060.0" y="4260.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Completed_ParallelFork" bpmnElement="Flow_Completed_ParallelFork">
-        <di:waypoint x="1600.0" y="3640.0" />
-        <di:waypoint x="1600.0" y="3740.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SuccessFork_NotifyCustomer" bpmnElement="Flow_SuccessFork_NotifyCustomer">
-        <di:waypoint x="1575.0" y="3765.0" />
-        <di:waypoint x="1380" y="3765.0" />
-        <di:waypoint x="1380" y="3920.0" />
-        <di:waypoint x="1285.0" y="3920.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SuccessFork_AuditPivot" bpmnElement="Flow_SuccessFork_AuditPivot">
-        <di:waypoint x="1625.0" y="3765.0" />
-        <di:waypoint x="1780" y="3765.0" />
-        <di:waypoint x="1780" y="3920.0" />
-        <di:waypoint x="1935.0" y="3920.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_NotifyCustomerSuccess_Join" bpmnElement="Flow_NotifyCustomerSuccess_Join">
-        <di:waypoint x="1285.0" y="3990.0" />
-        <di:waypoint x="1380" y="3990.0" />
-        <di:waypoint x="1380" y="4145.0" />
-        <di:waypoint x="1575.0" y="4145.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_AuditPivot_Join" bpmnElement="Flow_AuditPivot_Join">
-        <di:waypoint x="1935.0" y="3990.0" />
-        <di:waypoint x="1780" y="3990.0" />
-        <di:waypoint x="1780" y="4145.0" />
-        <di:waypoint x="1625.0" y="4145.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SuccessJoin_Closed" bpmnElement="Flow_SuccessJoin_Closed">
-        <di:waypoint x="1600.0" y="4170.0" />
-        <di:waypoint x="1600.0" y="4310.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ClosedSuccess_End" bpmnElement="Flow_ClosedSuccess_End">
-        <di:waypoint x="1600.0" y="4370.0" />
-        <di:waypoint x="1600.0" y="4470.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundRoute_RefundCommand" bpmnElement="Flow_RefundRoute_RefundCommand">
-        <di:waypoint x="320.0" y="3400.0" />
-        <di:waypoint x="320.0" y="3520.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundCommand_Gateway" bpmnElement="Flow_RefundCommand_Gateway">
-        <di:waypoint x="320.0" y="3600.0" />
-        <di:waypoint x="320.0" y="3710.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundConfirmed_Refunded" bpmnElement="Flow_RefundConfirmed_Refunded">
-        <di:waypoint x="320.0" y="3760.0" />
-        <di:waypoint x="320.0" y="3845.0" />
-        <di:waypoint x="310.0" y="3845.0" />
-        <di:waypoint x="310.0" y="3930.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundAbsent_CheckRetry" bpmnElement="Flow_RefundAbsent_CheckRetry">
-        <di:waypoint x="345.0" y="3735.0" />
-        <di:waypoint x="582.5" y="3735.0" />
-        <di:waypoint x="582.5" y="3700.0" />
-        <di:waypoint x="820.0" y="3700.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundUnknown_SaveRecon" bpmnElement="Flow_RefundUnknown_SaveRecon">
-        <di:waypoint x="345.0" y="3735.0" />
-        <di:waypoint x="345.0" y="4035.0" />
-        <di:waypoint x="940.0" y="4035.0" />
-        <di:waypoint x="940.0" y="4335.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_CheckRefundRetry_Gateway" bpmnElement="Flow_CheckRefundRetry_Gateway">
-        <di:waypoint x="970.0" y="3735.0" />
-        <di:waypoint x="970.0" y="3840.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundRetry_RefundCommand" bpmnElement="Flow_RefundRetry_RefundCommand">
-        <di:waypoint x="970.0" y="3840.0" />
-        <di:waypoint x="970.0" y="3480" />
-        <di:waypoint x="480.0" y="3480" />
-        <di:waypoint x="480.0" y="3560.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundRetryRequired" bpmnElement="Flow_RefundRetryRequired">
-        <di:waypoint x="970.0" y="3890.0" />
-        <di:waypoint x="970.0" y="4525.0" />
-        <di:waypoint x="1100.0" y="4525.0" />
-        <di:waypoint x="1100.0" y="5160.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_SaveRefundRecon_Query" bpmnElement="Flow_SaveRefundRecon_Query">
-        <di:waypoint x="1090.0" y="4370.0" />
-        <di:waypoint x="1090.0" y="4460.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_QueryRefundStatus_Gateway" bpmnElement="Flow_QueryRefundStatus_Gateway">
-        <di:waypoint x="1090.0" y="4540.0" />
-        <di:waypoint x="1090.0" y="4640.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusConfirmed_Refunded" bpmnElement="Flow_RefundStatusConfirmed_Refunded">
-        <di:waypoint x="1065.0" y="4665.0" />
-        <di:waypoint x="1065.0" y="4315.0" />
-        <di:waypoint x="440.0" y="4315.0" />
-        <di:waypoint x="440.0" y="3965.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusRetry_RefundCommand" bpmnElement="Flow_RefundStatusRetry_RefundCommand">
-        <di:waypoint x="1065.0" y="4665.0" />
-        <di:waypoint x="760" y="4665.0" />
-        <di:waypoint x="760" y="3560.0" />
-        <di:waypoint x="480.0" y="3560.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusRequired" bpmnElement="Flow_RefundStatusRequired">
-        <di:waypoint x="1090.0" y="4690.0" />
-        <di:waypoint x="1090.0" y="4925.0" />
-        <di:waypoint x="1100.0" y="4925.0" />
-        <di:waypoint x="1100.0" y="5160.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusUnknown_Wait" bpmnElement="Flow_RefundStatusUnknown_Wait">
-        <di:waypoint x="1090.0" y="4690.0" />
-        <di:waypoint x="1090.0" y="4810.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundWait_RetryTimer" bpmnElement="Flow_RefundWait_RetryTimer">
-        <di:waypoint x="1065.0" y="4835.0" />
-        <di:waypoint x="904.5" y="4835.0" />
-        <di:waypoint x="904.5" y="5002.0" />
-        <di:waypoint x="744.0" y="5002.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusLoop" bpmnElement="Flow_RefundStatusLoop">
-        <di:waypoint x="722.0" y="4980.0" />
-        <di:waypoint x="722.0" y="4440" />
-        <di:waypoint x="940.0" y="4440" />
-        <di:waypoint x="940.0" y="4500.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundWait_DeadlineTimer" bpmnElement="Flow_RefundWait_DeadlineTimer">
-        <di:waypoint x="1115.0" y="4835.0" />
-        <di:waypoint x="1282.5" y="4835.0" />
-        <di:waypoint x="1282.5" y="5002.0" />
-        <di:waypoint x="1450.0" y="5002.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundDeadline_Required" bpmnElement="Flow_RefundDeadline_Required">
-        <di:waypoint x="1450.0" y="5002.0" />
-        <di:waypoint x="1450.0" y="5101.0" />
-        <di:waypoint x="1260.0" y="5101.0" />
-        <di:waypoint x="1260.0" y="5200.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_Refunded_ParallelFork" bpmnElement="Flow_Refunded_ParallelFork">
-        <di:waypoint x="310.0" y="4000.0" />
-        <di:waypoint x="310.0" y="4045.0" />
-        <di:waypoint x="320.0" y="4045.0" />
-        <di:waypoint x="320.0" y="4090.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundFork_NotifyCustomer" bpmnElement="Flow_RefundFork_NotifyCustomer">
-        <di:waypoint x="295.0" y="4115.0" />
-        <di:waypoint x="180" y="4115.0" />
-        <di:waypoint x="180" y="4260.0" />
-        <di:waypoint x="150.0" y="4260.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundFork_NotifySecurity" bpmnElement="Flow_RefundFork_NotifySecurity">
-        <di:waypoint x="345.0" y="4115.0" />
-        <di:waypoint x="500" y="4115.0" />
-        <di:waypoint x="500" y="4260.0" />
-        <di:waypoint x="680.0" y="4260.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_NotifyCustomerRefund_Join" bpmnElement="Flow_NotifyCustomerRefund_Join">
-        <di:waypoint x="150.0" y="4330.0" />
-        <di:waypoint x="180" y="4330.0" />
-        <di:waypoint x="180" y="4465.0" />
-        <di:waypoint x="295.0" y="4465.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_NotifySecurityRefund_Join" bpmnElement="Flow_NotifySecurityRefund_Join">
-        <di:waypoint x="680.0" y="4330.0" />
-        <di:waypoint x="500" y="4330.0" />
-        <di:waypoint x="500" y="4465.0" />
-        <di:waypoint x="345.0" y="4465.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundJoin_Closed" bpmnElement="Flow_RefundJoin_Closed">
-        <di:waypoint x="320.0" y="4490.0" />
-        <di:waypoint x="320.0" y="4610.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_ClosedRefund_End" bpmnElement="Flow_ClosedRefund_End">
-        <di:waypoint x="320.0" y="4670.0" />
-        <di:waypoint x="320.0" y="4770.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Flow_RefundRequired_End" bpmnElement="Flow_RefundRequired_End">
-        <di:waypoint x="1100.0" y="5240.0" />
-        <di:waypoint x="1100.0" y="5320.0" />
-      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_Task_Refunded" bpmnElement="Task_Refunded">
+        <dc:Bounds x="160" y="3930" width="260" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_RefundFork" bpmnElement="Gateway_RefundFork">
+        <dc:Bounds x="265" y="4090" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="185" y="4108" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_NotifyCustomerRefund" bpmnElement="Task_NotifyCustomerRefund">
+        <dc:Bounds x="160" y="4205" width="260" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_NotifySecurityRefund" bpmnElement="Task_NotifySecurityRefund">
+        <dc:Bounds x="860" y="4165" width="260" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CheckRefundRetry" bpmnElement="Task_CheckRefundRetry">
+        <dc:Bounds x="1260" y="3730" width="300" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_RefundResponse" bpmnElement="Gateway_RefundResponse" isMarkerVisible="true">
+        <dc:Bounds x="425" y="3655" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="325.5" y="3666" width="89" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_RefundPayer" bpmnElement="Task_RefundPayer">
+        <dc:Bounds x="520" y="3520" width="320" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_RefundRoute" bpmnElement="Task_RefundRoute">
+        <dc:Bounds x="590" y="2950" width="280" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_SecurityFraud" bpmnElement="Task_SecurityFraud">
+        <dc:Bounds x="260" y="3260" width="300" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_CancelDebit" bpmnElement="Task_CancelDebit">
+        <dc:Bounds x="1230" y="1180" width="220" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_SetRejectedDebit" bpmnElement="Task_SetRejectedDebit">
+        <dc:Bounds x="1230" y="1320" width="220" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_OutboxDebitNotification" bpmnElement="Task_OutboxDebitNotification">
+        <dc:Bounds x="1230" y="1460" width="220" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ClosedDebit" bpmnElement="Task_ClosedDebit">
+        <dc:Bounds x="1260" y="1620" width="160" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_DebitRejected" bpmnElement="EndEvent_DebitRejected">
+        <dc:Bounds x="1322" y="1732" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1324" y="1768" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_PrecheckRejected" bpmnElement="EndEvent_PrecheckRejected">
+        <dc:Bounds x="712" y="1402" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="714" y="1438" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_PrecheckPassed" bpmnElement="Gateway_PrecheckPassed" isMarkerVisible="true">
+        <dc:Bounds x="2015" y="865" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2075" y="870" width="86" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ReturnSavedResult" bpmnElement="Task_ReturnSavedResult">
+        <dc:Bounds x="1410" y="370" width="240" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_ExistingPayment" bpmnElement="EndEvent_ExistingPayment">
+        <dc:Bounds x="1512" y="472" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1514" y="508" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_QueryDebitStatus" bpmnElement="Task_QueryDebitStatus">
+        <dc:Bounds x="2940" y="1360" width="280" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_DebitStatus" bpmnElement="Gateway_DebitStatus" isMarkerVisible="true">
+        <dc:Bounds x="3055" y="1540" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3115" y="1551" width="86" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_DebitReconWait" bpmnElement="Gateway_DebitReconWait">
+        <dc:Bounds x="3055" y="1710" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3038" y="1760" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_FinReconDebit" bpmnElement="Task_FinReconDebit">
+        <dc:Bounds x="3332" y="1970" width="300" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_FinReconDebit" bpmnElement="EndEvent_FinReconDebit">
+        <dc:Bounds x="3464" y="2092" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3456" y="2128" width="53" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_Completed" bpmnElement="Task_Completed">
+        <dc:Bounds x="1890" y="3520" width="300" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_RefundJoin" bpmnElement="Gateway_RefundJoin">
+        <dc:Bounds x="265" y="4345" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="191.5" y="4356" width="63" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_ClosedRefund" bpmnElement="Task_ClosedRefund">
+        <dc:Bounds x="210" y="4480" width="160" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_Refund" bpmnElement="EndEvent_Refund">
+        <dc:Bounds x="272" y="4582" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="274" y="4618" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_RefundReconWait" bpmnElement="Gateway_RefundReconWait">
+        <dc:Bounds x="1465" y="4810" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1448" y="4860" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway_RefundStatus" bpmnElement="Gateway_RefundStatus" isMarkerVisible="true">
+        <dc:Bounds x="1265" y="4640" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1325" y="4651" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_QueryRefundStatus" bpmnElement="Task_QueryRefundStatus">
+        <dc:Bounds x="1608" y="4500" width="300" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_SaveRefundReconciliation" bpmnElement="Task_SaveRefundReconciliation">
+        <dc:Bounds x="1608" y="4255" width="300" height="70" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Edge_Association_EventRace_Fraud" bpmnElement="Association_EventRace_Fraud">
-        <di:waypoint x="3105.0" y="2350.0" />
-        <di:waypoint x="3105" y="2240" />
-        <di:waypoint x="1600" y="2240" />
-        <di:waypoint x="1625.0" y="1985.0" />
+        <di:waypoint x="3215" y="2490" />
+        <di:waypoint x="3215" y="2280" />
+        <di:waypoint x="2450" y="2280" />
+        <di:waypoint x="2065" y="1985" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_Association_EventRace_Manual" bpmnElement="Association_EventRace_Manual">
-        <di:waypoint x="3105.0" y="2460.0" />
-        <di:waypoint x="3105" y="2780" />
-        <di:waypoint x="1600" y="2780" />
-        <di:waypoint x="1625.0" y="2475.0" />
+        <di:waypoint x="3215" y="2600" />
+        <di:waypoint x="3215" y="2780" />
+        <di:waypoint x="2430" y="2780" />
+        <di:waypoint x="2065" y="2475" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_Association_Pivot_Transfer" bpmnElement="Association_Pivot_Transfer">
-        <di:waypoint x="2140.0" y="3030.0" />
-        <di:waypoint x="1950.0" y="3030.0" />
-        <di:waypoint x="1950.0" y="3200.0" />
-        <di:waypoint x="1760.0" y="3200.0" />
+        <di:waypoint x="2285" y="3200" />
+        <di:waypoint x="2200" y="3200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_TextAnnotation_EventRace" bpmnElement="TextAnnotation_EventRace">
+        <dc:Bounds x="3050" y="2490" width="330" height="110" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_TextAnnotation_Pivot" bpmnElement="TextAnnotation_Pivot">
+        <dc:Bounds x="2285" y="3150" width="330" height="100" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Flow_Start_CheckIdempotency" bpmnElement="Flow_Start_CheckIdempotency">
+        <di:waypoint x="2040" y="116" />
+        <di:waypoint x="2040" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_CheckIdempotency_PaymentExists" bpmnElement="Flow_CheckIdempotency_PaymentExists">
+        <di:waypoint x="2040" y="290" />
+        <di:waypoint x="2040" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_PaymentExists_ReturnSaved" bpmnElement="Flow_PaymentExists_ReturnSaved">
+        <di:waypoint x="2015" y="405" />
+        <di:waypoint x="1650" y="405" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1665" y="390" width="13" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_PaymentNotExists_CreatePayment" bpmnElement="Flow_PaymentNotExists_CreatePayment">
+        <di:waypoint x="2040" y="430" />
+        <di:waypoint x="2040" y="560" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2047" y="485" width="17" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_CreatePayment_Precheck" bpmnElement="Flow_CreatePayment_Precheck">
+        <di:waypoint x="2040" y="640" />
+        <di:waypoint x="2040" y="730" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Precheck_Gateway" bpmnElement="Flow_Precheck_Gateway">
+        <di:waypoint x="2040" y="800" />
+        <di:waypoint x="2040" y="865" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_PrecheckFailed_Cancel" bpmnElement="Flow_PrecheckFailed_Cancel">
+        <di:waypoint x="2015" y="890" />
+        <di:waypoint x="840" y="890" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="862" y="877" width="17" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_CancelPrecheck_Rejected" bpmnElement="Flow_CancelPrecheck_Rejected">
+        <di:waypoint x="730" y="920" />
+        <di:waypoint x="730" y="1000" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RejectedPrecheck_Outbox" bpmnElement="Flow_RejectedPrecheck_Outbox">
+        <di:waypoint x="730" y="1060" />
+        <di:waypoint x="730" y="1140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_OutboxPrecheck_Closed" bpmnElement="Flow_OutboxPrecheck_Closed">
+        <di:waypoint x="730" y="1210" />
+        <di:waypoint x="730" y="1300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ClosedPrecheck_End" bpmnElement="Flow_ClosedPrecheck_End">
+        <di:waypoint x="730" y="1360" />
+        <di:waypoint x="730" y="1402" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_PrecheckPassed_Debit" bpmnElement="Flow_PrecheckPassed_Debit">
+        <di:waypoint x="2040" y="915" />
+        <di:waypoint x="2040" y="1080" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2049" y="987" width="13" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Debit_Gateway" bpmnElement="Flow_Debit_Gateway">
+        <di:waypoint x="2040" y="1160" />
+        <di:waypoint x="2040" y="1260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitConfirmed_Debited" bpmnElement="Flow_DebitConfirmed_Debited">
+        <di:waypoint x="2040" y="1310" />
+        <di:waypoint x="2040" y="1450" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2018" y="1370" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitRefused_Cancel" bpmnElement="Flow_DebitRefused_Cancel">
+        <di:waypoint x="2015" y="1285" />
+        <di:waypoint x="1597.5" y="1285" />
+        <di:waypoint x="1597.5" y="1210" />
+        <di:waypoint x="1450" y="1210" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1580" y="1278" width="66" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitUnknown_SaveRecon" bpmnElement="Flow_DebitUnknown_SaveRecon">
+        <di:waypoint x="2065" y="1285" />
+        <di:waypoint x="2502.5" y="1285" />
+        <di:waypoint x="2502.5" y="1235" />
+        <di:waypoint x="2940" y="1235" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2476" y="1250" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SaveDebitRecon_Query" bpmnElement="Flow_SaveDebitRecon_Query">
+        <di:waypoint x="3080" y="1270" />
+        <di:waypoint x="3080" y="1360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitWait_RetryTimer" bpmnElement="Flow_DebitWait_RetryTimer">
+        <di:waypoint x="3055" y="1735" />
+        <di:waypoint x="2899.5" y="1735" />
+        <di:waypoint x="2899.5" y="1902" />
+        <di:waypoint x="2734" y="1902" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2885" y="1809" width="60" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitRetry_Query" bpmnElement="Flow_DebitRetry_Query">
+        <di:waypoint x="2712" y="1880" />
+        <di:waypoint x="2712" y="1340" />
+        <di:waypoint x="2940" y="1340" />
+        <di:waypoint x="2940" y="1370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitWait_DeadlineTimer" bpmnElement="Flow_DebitWait_DeadlineTimer">
+        <di:waypoint x="3105" y="1735" />
+        <di:waypoint x="3287.5" y="1735" />
+        <di:waypoint x="3287.5" y="1902" />
+        <di:waypoint x="3460" y="1902" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3272" y="1809" width="61" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitDeadline_FinRecon" bpmnElement="Flow_DebitDeadline_FinRecon">
+        <di:waypoint x="3482" y="1924" />
+        <di:waypoint x="3482" y="1970" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitStatusConfirmed_Debited" bpmnElement="Flow_DebitStatusConfirmed_Debited">
+        <di:waypoint x="3055" y="1565" />
+        <di:waypoint x="2622.5" y="1565" />
+        <di:waypoint x="2622.5" y="1485" />
+        <di:waypoint x="2180" y="1485" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2601" y="1515" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Debited_FraudRequest" bpmnElement="Flow_Debited_FraudRequest">
+        <di:waypoint x="2040" y="1520" />
+        <di:waypoint x="2040" y="1630" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudRequest_Wait" bpmnElement="Flow_FraudRequest_Wait">
+        <di:waypoint x="2040" y="1710" />
+        <di:waypoint x="2040" y="1790" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SaveFraudChecking_EventGateway" bpmnElement="Flow_SaveFraudChecking_EventGateway">
+        <di:waypoint x="2040" y="1850" />
+        <di:waypoint x="2040" y="1960" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Allow" bpmnElement="Flow_FraudEvents_Allow">
+        <di:waypoint x="2015" y="1985" />
+        <di:waypoint x="1714.5" y="1985" />
+        <di:waypoint x="1714.5" y="2182" />
+        <di:waypoint x="1414" y="2182" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1702" y="2074" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Deny" bpmnElement="Flow_FraudEvents_Deny">
+        <di:waypoint x="2015" y="1985" />
+        <di:waypoint x="1374.5" y="1985" />
+        <di:waypoint x="1374.5" y="2182" />
+        <di:waypoint x="734" y="2182" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1364" y="2074" width="51" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Manual" bpmnElement="Flow_FraudEvents_Manual">
+        <di:waypoint x="2040" y="2010" />
+        <di:waypoint x="2040" y="2060" />
+        <di:waypoint x="2042" y="2060" />
+        <di:waypoint x="2042" y="2110" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1998" y="2035" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudEvents_Cutoff" bpmnElement="Flow_FraudEvents_Cutoff">
+        <di:waypoint x="2065" y="1985" />
+        <di:waypoint x="2442.5" y="1985" />
+        <di:waypoint x="2442.5" y="2182" />
+        <di:waypoint x="2820" y="2182" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2424" y="2074" width="67" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudAllow_Approved" bpmnElement="Flow_FraudAllow_Approved">
+        <di:waypoint x="1392" y="2204" />
+        <di:waypoint x="1392" y="2320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudDeny_RefundRoute" bpmnElement="Flow_FraudDeny_RefundRoute">
+        <di:waypoint x="712" y="2204" />
+        <di:waypoint x="712" y="2480" />
+        <di:waypoint x="390" y="2480" />
+        <di:waypoint x="390" y="2575" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudManual_SaveWait" bpmnElement="Flow_FraudManual_SaveWait">
+        <di:waypoint x="2042" y="2154" />
+        <di:waypoint x="2042" y="2207" />
+        <di:waypoint x="2040" y="2207" />
+        <di:waypoint x="2040" y="2260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudCutoff_Approve" bpmnElement="Flow_FraudCutoff_Approve">
+        <di:waypoint x="2842" y="2204" />
+        <di:waypoint x="2842" y="2360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudAllow_ToApproved" bpmnElement="Flow_FraudAllow_ToApproved">
+        <di:waypoint x="1392" y="2390" />
+        <di:waypoint x="1392" y="2920" />
+        <di:waypoint x="1900" y="2920" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SaveManual_EventGateway" bpmnElement="Flow_SaveManual_EventGateway">
+        <di:waypoint x="2040" y="2340" />
+        <di:waypoint x="2040" y="2450" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualEvents_Allow" bpmnElement="Flow_ManualEvents_Allow">
+        <di:waypoint x="2015" y="2475" />
+        <di:waypoint x="1714.5" y="2475" />
+        <di:waypoint x="1714.5" y="2662" />
+        <di:waypoint x="1414" y="2662" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1702" y="2559" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualEvents_Deny" bpmnElement="Flow_ManualEvents_Deny">
+        <di:waypoint x="2040" y="2450" />
+        <di:waypoint x="2040" y="2380" />
+        <di:waypoint x="712" y="2380" />
+        <di:waypoint x="712" y="2640" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1351" y="2355" width="51" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualEvents_Cutoff" bpmnElement="Flow_ManualEvents_Cutoff">
+        <di:waypoint x="2065" y="2475" />
+        <di:waypoint x="2442.5" y="2475" />
+        <di:waypoint x="2442.5" y="2620" />
+        <di:waypoint x="2820" y="2620" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2435" y="2539" width="46" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualAllow_Approved" bpmnElement="Flow_ManualAllow_Approved">
+        <di:waypoint x="1392" y="2684" />
+        <di:waypoint x="1392" y="2800" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualDeny_RefundRoute" bpmnElement="Flow_ManualDeny_RefundRoute">
+        <di:waypoint x="712" y="2684" />
+        <di:waypoint x="712" y="2760" />
+        <di:waypoint x="240" y="2760" />
+        <di:waypoint x="240" y="2635" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualAllow_ToApproved" bpmnElement="Flow_ManualAllow_ToApproved">
+        <di:waypoint x="1392" y="2870" />
+        <di:waypoint x="1392" y="2920" />
+        <di:waypoint x="1900" y="2920" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Approved_Transfer" bpmnElement="Flow_Approved_Transfer">
+        <di:waypoint x="2040" y="2955" />
+        <di:waypoint x="2040" y="3160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Transfer_Gateway" bpmnElement="Flow_Transfer_Gateway">
+        <di:waypoint x="2040" y="3240" />
+        <di:waypoint x="2040" y="3340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferConfirmed_Completed" bpmnElement="Flow_TransferConfirmed_Completed">
+        <di:waypoint x="2040" y="3390" />
+        <di:waypoint x="2040" y="3520" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2021" y="3444" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferNone_RefundRoute" bpmnElement="Flow_TransferNone_RefundRoute">
+        <di:waypoint x="2015" y="3365" />
+        <di:waypoint x="1200" y="3365" />
+        <di:waypoint x="1200" y="2980" />
+        <di:waypoint x="870" y="2980" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1185" y="3358" width="60" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferUnknown_SaveRecon" bpmnElement="Flow_TransferUnknown_SaveRecon">
+        <di:waypoint x="2065" y="3365" />
+        <di:waypoint x="2502.5" y="3365" />
+        <di:waypoint x="2502.5" y="3295" />
+        <di:waypoint x="2940" y="3295" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2476" y="3320" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SaveTransferRecon_Query" bpmnElement="Flow_SaveTransferRecon_Query">
+        <di:waypoint x="3090" y="3330" />
+        <di:waypoint x="3090" y="3440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_QueryTransferStatus_Gateway" bpmnElement="Flow_QueryTransferStatus_Gateway">
+        <di:waypoint x="3090" y="3520" />
+        <di:waypoint x="3090" y="3600" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferStatusConfirmed_Completed" bpmnElement="Flow_TransferStatusConfirmed_Completed">
+        <di:waypoint x="3065" y="3625" />
+        <di:waypoint x="2627.5" y="3625" />
+        <di:waypoint x="2627.5" y="3560" />
+        <di:waypoint x="2190" y="3560" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2609" y="3603" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferStatusNone_RefundRoute" bpmnElement="Flow_TransferStatusNone_RefundRoute">
+        <di:waypoint x="3065" y="3625" />
+        <di:waypoint x="1560" y="3625" />
+        <di:waypoint x="1560" y="2980" />
+        <di:waypoint x="870" y="2980" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1541" y="3289" width="69" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferStatusUnknown_Wait" bpmnElement="Flow_TransferStatusUnknown_Wait">
+        <di:waypoint x="3090" y="3650" />
+        <di:waypoint x="3090" y="3770" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3076" y="3700" width="58" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferWait_RetryTimer" bpmnElement="Flow_TransferWait_RetryTimer">
+        <di:waypoint x="3065" y="3795" />
+        <di:waypoint x="2734" y="3795" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2861" y="3766" width="60" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferWait_DeadlineTimer" bpmnElement="Flow_TransferWait_DeadlineTimer">
+        <di:waypoint x="3115" y="3795" />
+        <di:waypoint x="3460" y="3795" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3266" y="3766" width="61" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Completed_ParallelFork" bpmnElement="Flow_Completed_ParallelFork">
+        <di:waypoint x="2040" y="3600" />
+        <di:waypoint x="2040" y="3740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SuccessFork_NotifyCustomer" bpmnElement="Flow_SuccessFork_NotifyCustomer">
+        <di:waypoint x="2015" y="3765" />
+        <di:waypoint x="1870" y="3765" />
+        <di:waypoint x="1870" y="3920" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SuccessFork_AuditPivot" bpmnElement="Flow_SuccessFork_AuditPivot">
+        <di:waypoint x="2065" y="3765" />
+        <di:waypoint x="2220" y="3765" />
+        <di:waypoint x="2220" y="3920" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_NotifyCustomerSuccess_Join" bpmnElement="Flow_NotifyCustomerSuccess_Join">
+        <di:waypoint x="1870" y="3990" />
+        <di:waypoint x="1870" y="4145" />
+        <di:waypoint x="2015" y="4145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_AuditPivot_Join" bpmnElement="Flow_AuditPivot_Join">
+        <di:waypoint x="2220" y="3990" />
+        <di:waypoint x="2220" y="4145" />
+        <di:waypoint x="2065" y="4145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SuccessJoin_Closed" bpmnElement="Flow_SuccessJoin_Closed">
+        <di:waypoint x="2040" y="4170" />
+        <di:waypoint x="2040" y="4210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_CheckRefundRetry_Gateway" bpmnElement="Flow_CheckRefundRetry_Gateway">
+        <di:waypoint x="1410" y="3800" />
+        <di:waypoint x="1410" y="3840" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundRetry_RefundCommand" bpmnElement="Flow_RefundRetry_RefundCommand">
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1159" y="3490" width="13" height="14" />
+        </bpmndi:BPMNLabel>
+        <di:waypoint x="1385.0" y="3865.0" />
+        <di:waypoint x="1100" y="3865" />
+        <di:waypoint x="1100" y="3560" />
+        <di:waypoint x="840.0" y="3560.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundRetryRequired" bpmnElement="Flow_RefundRetryRequired">
+        <di:waypoint x="1410" y="3890" />
+        <di:waypoint x="1410" y="4525" />
+        <di:waypoint x="1540" y="4525" />
+        <di:waypoint x="1540" y="5060" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1467" y="4500" width="17" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusUnknown_Wait" bpmnElement="Flow_RefundStatusUnknown_Wait">
+        <di:waypoint x="1290" y="4690" />
+        <di:waypoint x="1290" y="4835" />
+        <di:waypoint x="1465" y="4835" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1276" y="4753" width="58" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundWait_RetryTimer" bpmnElement="Flow_RefundWait_RetryTimer">
+        <di:waypoint x="1465" y="4835" />
+        <di:waypoint x="1184" y="4835" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1287" y="4806" width="60" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundWait_DeadlineTimer" bpmnElement="Flow_RefundWait_DeadlineTimer">
+        <di:waypoint x="1515" y="4835" />
+        <di:waypoint x="1890" y="4835" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1682" y="4806" width="61" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FraudCutoff_ToApproved" bpmnElement="Flow_FraudCutoff_ToApproved">
+        <di:waypoint x="2842" y="2440" />
+        <di:waypoint x="2842" y="2598" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferRetry_Query" bpmnElement="Flow_TransferRetry_Query">
+        <di:waypoint x="2712" y="3773" />
+        <di:waypoint x="2712" y="3480" />
+        <di:waypoint x="2940" y="3480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_TransferDeadline_FinRecon" bpmnElement="Flow_TransferDeadline_FinRecon">
+        <di:waypoint x="3482" y="3817" />
+        <di:waypoint x="3482" y="3860" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FinReconTransfer_End" bpmnElement="Flow_FinReconTransfer_End">
+        <di:waypoint x="3482" y="3940" />
+        <di:waypoint x="3482" y="3982" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ClosedSuccess_End" bpmnElement="Flow_ClosedSuccess_End">
+        <di:waypoint x="2040" y="4270" />
+        <di:waypoint x="2040" y="4302" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundUnknown_SaveRecon" bpmnElement="Flow_RefundUnknown_SaveRecon">
+        <di:waypoint x="475" y="3680" />
+        <di:waypoint x="475" y="4035" />
+        <di:waypoint x="1608" y="4035" />
+        <di:waypoint x="1608" y="4265" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1000" y="4010" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_SaveRefundRecon_Query" bpmnElement="Flow_SaveRefundRecon_Query">
+        <di:waypoint x="1758" y="4325" />
+        <di:waypoint x="1758" y="4500" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusLoop" bpmnElement="Flow_RefundStatusLoop">
+        <di:waypoint x="1162" y="4813" />
+        <di:waypoint x="1162" y="4440" />
+        <di:waypoint x="1608" y="4440" />
+        <di:waypoint x="1608" y="4510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_QueryRefundStatus_Gateway" bpmnElement="Flow_QueryRefundStatus_Gateway">
+        <di:waypoint x="1608" y="4540" />
+        <di:waypoint x="1290" y="4540" />
+        <di:waypoint x="1290" y="4640" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundDeadline_Required" bpmnElement="Flow_RefundDeadline_Required">
+        <di:waypoint x="1890" y="4835" />
+        <di:waypoint x="1890" y="5100" />
+        <di:waypoint x="1700" y="5100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusRequired" bpmnElement="Flow_RefundStatusRequired">
+        <di:waypoint x="1290" y="4690" />
+        <di:waypoint x="1290" y="4925" />
+        <di:waypoint x="1540" y="4925" />
+        <di:waypoint x="1540" y="5060" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1407" y="4900" width="65" height="53" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundRequired_End" bpmnElement="Flow_RefundRequired_End">
+        <di:waypoint x="1540" y="5140" />
+        <di:waypoint x="1540" y="5220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusConfirmed_Refunded" bpmnElement="Flow_RefundStatusConfirmed_Refunded">
+        <di:waypoint x="1265" y="4665" />
+        <di:waypoint x="1265" y="4315" />
+        <di:waypoint x="680" y="4315" />
+        <di:waypoint x="420" y="3965" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="939" y="4290" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundStatusRetry_RefundCommand" bpmnElement="Flow_RefundStatusRetry_RefundCommand">
+        <di:waypoint x="1265" y="4665" />
+        <di:waypoint x="1200" y="4665" />
+        <di:waypoint x="1200" y="3560" />
+        <di:waypoint x="840" y="3560" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1171" y="4103" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundConfirmed_Refunded" bpmnElement="Flow_RefundConfirmed_Refunded">
+        <di:waypoint x="450" y="3705" />
+        <di:waypoint x="450" y="3828" />
+        <di:waypoint x="290" y="3828" />
+        <di:waypoint x="290" y="3930" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="276" y="3819" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Refunded_ParallelFork" bpmnElement="Flow_Refunded_ParallelFork">
+        <di:waypoint x="290" y="4000" />
+        <di:waypoint x="290" y="4090" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundFork_NotifyCustomer" bpmnElement="Flow_RefundFork_NotifyCustomer">
+        <di:waypoint x="290" y="4140" />
+        <di:waypoint x="290" y="4205" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundFork_NotifySecurity" bpmnElement="Flow_RefundFork_NotifySecurity">
+        <di:waypoint x="315" y="4115" />
+        <di:waypoint x="990" y="4115" />
+        <di:waypoint x="990" y="4165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_NotifyCustomerRefund_Join" bpmnElement="Flow_NotifyCustomerRefund_Join">
+        <di:waypoint x="290" y="4275" />
+        <di:waypoint x="290" y="4345" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_NotifySecurityRefund_Join" bpmnElement="Flow_NotifySecurityRefund_Join">
+        <di:waypoint x="990" y="4235" />
+        <di:waypoint x="990" y="4370" />
+        <di:waypoint x="315" y="4370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundAbsent_CheckRetry" bpmnElement="Flow_RefundAbsent_CheckRetry">
+        <di:waypoint x="450" y="3705" />
+        <di:waypoint x="450" y="3765" />
+        <di:waypoint x="1260" y="3765" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="568" y="3761" width="87" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundCommand_Gateway" bpmnElement="Flow_RefundCommand_Gateway">
+        <di:waypoint x="680" y="3600" />
+        <di:waypoint x="680" y="3680" />
+        <di:waypoint x="475" y="3680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundRoute_RefundCommand" bpmnElement="Flow_RefundRoute_RefundCommand">
+        <di:waypoint x="730.0" y="3210.0" />
+        <di:waypoint x="680.0" y="3520.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitStatusNone_Cancel" bpmnElement="Flow_DebitStatusNone_Cancel">
+        <di:waypoint x="3055" y="1565" />
+        <di:waypoint x="2291" y="1565" />
+        <di:waypoint x="2291" y="1210" />
+        <di:waypoint x="1450" y="1210" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2273" y="1377" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_CancelDebit_Rejected" bpmnElement="Flow_CancelDebit_Rejected">
+        <di:waypoint x="1340" y="1240" />
+        <di:waypoint x="1340" y="1320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RejectedDebit_Outbox" bpmnElement="Flow_RejectedDebit_Outbox">
+        <di:waypoint x="1340" y="1380" />
+        <di:waypoint x="1340" y="1460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_OutboxDebit_Closed" bpmnElement="Flow_OutboxDebit_Closed">
+        <di:waypoint x="1340" y="1530" />
+        <di:waypoint x="1340" y="1620" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ClosedDebit_End" bpmnElement="Flow_ClosedDebit_End">
+        <di:waypoint x="1340" y="1680" />
+        <di:waypoint x="1340" y="1732" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ReturnSaved_End" bpmnElement="Flow_ReturnSaved_End">
+        <di:waypoint x="1530" y="440" />
+        <di:waypoint x="1530" y="472" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_QueryDebitStatus_Gateway" bpmnElement="Flow_QueryDebitStatus_Gateway">
+        <di:waypoint x="3080" y="1440" />
+        <di:waypoint x="3080" y="1540" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DebitStatusUnknown_Wait" bpmnElement="Flow_DebitStatusUnknown_Wait">
+        <di:waypoint x="3080" y="1590" />
+        <di:waypoint x="3080" y="1710" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3066" y="1640" width="58" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_FinReconDebit_End" bpmnElement="Flow_FinReconDebit_End">
+        <di:waypoint x="3482" y="2050" />
+        <di:waypoint x="3482" y="2092" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundJoin_Closed" bpmnElement="Flow_RefundJoin_Closed">
+        <di:waypoint x="290" y="4395" />
+        <di:waypoint x="290" y="4480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ClosedRefund_End" bpmnElement="Flow_ClosedRefund_End">
+        <di:waypoint x="290" y="4540" />
+        <di:waypoint x="290" y="4582" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_Gateway_RefundRouteSecurityNeeded" bpmnElement="Gateway_RefundRouteSecurityNeeded" isMarkerVisible="true">
+        <dc:Bounds x="705" y="3160" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundRoute_Security" bpmnElement="Flow_RefundRoute_Security">
+        <di:waypoint x="705.0" y="3185.0" />
+        <di:waypoint x="610" y="3185" />
+        <di:waypoint x="610" y="3295" />
+        <di:waypoint x="560.0" y="3295.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualCutoff_Approve" bpmnElement="Flow_ManualCutoff_Approve">
+        <di:waypoint x="2842.0" y="2642.0" />
+        <di:waypoint x="2842.0" y="2810.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ManualCutoff_ToApproved" bpmnElement="Flow_ManualCutoff_ToApproved">
+        <di:waypoint x="2682.0" y="2850.0" />
+        <di:waypoint x="2431.0" y="2850.0" />
+        <di:waypoint x="2431.0" y="2920.0" />
+        <di:waypoint x="2180.0" y="2920.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RefundRoute_SecurityNeeded" bpmnElement="Flow_RefundRoute_SecurityNeeded">
+        <di:waypoint x="730.0" y="3010.0" />
+        <di:waypoint x="730.0" y="3160.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Security_RefundCommand" bpmnElement="Flow_Security_RefundCommand">
+        <di:waypoint x="410.0" y="3330.0" />
+        <di:waypoint x="410" y="3460" />
+        <di:waypoint x="680.0" y="3520.0" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
